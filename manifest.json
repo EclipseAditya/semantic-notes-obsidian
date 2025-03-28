@@ -1,0 +1,11 @@
+{
+  "id": "semantic-notes",
+  "name": "Semantic Notes",
+  "version": "0.1.0",
+  "minAppVersion": "0.15.0",
+  "description": "AI-powered note management: semantic search, AI Q&A with OpenRouter integration, and automatic note linking through embeddings",
+  "author": "Your Name",
+  "authorUrl": "https://github.com/yourusername",
+  "isDesktopOnly": true,
+  "dependencies": []
+}
