@@ -2,6 +2,8 @@
 
 AI-powered note management for Obsidian: semantic search, AI Q&A with OpenRouter integration, and automatic note linking through embeddings.
 
+Source code repository: https://github.com/EclipseAditya/semantic-notes-obsidian
+
 ## Features
 
 - **Semantic Search**: Find notes based on meaning, not just keywords
