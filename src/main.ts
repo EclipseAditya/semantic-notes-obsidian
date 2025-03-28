@@ -252,3 +252,210 @@ export default class SemanticNotesPlugin extends Plugin {
         
         new AskQuestionModal(this.app, this).open();
     }
+    
+    onunload() {
+        console.log('Unloading Semantic Notes plugin');
+        
+        // Save embeddings to disk on unload if persistent storage is enabled
+        if (this.settings.usePersistentStorage) {
+            this.saveEmbeddingsToDisk();
+        }
+        
+        // Clean up resources
+    }
+    
+    chunkMarkdownContent(markdownContent: string): string[] {
+        // Try to chunk by headings first for better semantic sections
+        const chunks = this.chunkByHeadings(markdownContent);
+        
+        // If that didn't produce enough chunks or they're too large,
+        // further chunk them by paragraph/size
+        const maxChunkSize = 1000; // Maximum recommended chunk size
+        const chunkOverlap = 200;  // Overlap between chunks
+        
+        let finalChunks: string[] = [];
+        
+        for (const chunk of chunks) {
+            if (chunk.length > maxChunkSize) {
+                // Further chunk this section
+                const subChunks = this.recursivelyChunkText(chunk, maxChunkSize, chunkOverlap);
+                finalChunks = finalChunks.concat(subChunks);
+            } else if (chunk.trim().length > 0) {
+                finalChunks.push(chunk);
+            }
+        }
+        
+        return finalChunks;
+    }
+    
+    chunkByHeadings(markdownContent: string): string[] {
+        // Split by headings (##, ###, etc.)
+        const headingRegex = /^#{1,6}\s+.+$/gm;
+        const headingMatches = [...markdownContent.matchAll(headingRegex)];
+        
+        if (headingMatches.length === 0) {
+            // No headings, just return the whole content
+            return [markdownContent];
+        }
+        
+        const chunks: string[] = [];
+        let currentIndex = 0;
+        
+        // Process each heading and the content that follows
+        for (let i = 0; i < headingMatches.length; i++) {
+            const headingMatch = headingMatches[i];
+            if (!headingMatch.index) continue;
+            
+            const headingIndex = headingMatch.index;
+            
+            // If this isn't the first heading, add the content before it
+            if (headingIndex > currentIndex) {
+                const chunk = markdownContent.substring(currentIndex, headingIndex).trim();
+                if (chunk.length > 0) {
+                    chunks.push(chunk);
+                }
+            }
+            
+            // Find the end of this heading's content (next heading or end of string)
+            const nextHeadingIndex = (i < headingMatches.length - 1 && headingMatches[i + 1].index) 
+                ? headingMatches[i + 1].index 
+                : markdownContent.length;
+            
+            // Add the heading and its content
+            const headingChunk = markdownContent.substring(headingIndex, nextHeadingIndex).trim();
+            if (headingChunk.length > 0) {
+                chunks.push(headingChunk);
+            }
+            
+            currentIndex = nextHeadingIndex;
+        }
+        
+        // Add any remaining content after the last heading
+        if (currentIndex < markdownContent.length) {
+            const chunk = markdownContent.substring(currentIndex).trim();
+            if (chunk.length > 0) {
+                chunks.push(chunk);
+            }
+        }
+        
+        return chunks;
+    }
+    
+    recursivelyChunkText(text: string, chunkSize: number, chunkOverlap: number): string[] {
+        // Split by paragraphs first
+        const paragraphs = text.split(/\n\s*\n/);
+        let chunks: string[] = [];
+        let currentChunk = '';
+        
+        for (const paragraph of paragraphs) {
+            const paraText = paragraph.trim();
+            if (!paraText) continue;
+            
+            // If adding this paragraph would make the chunk too big, save current chunk and start a new one
+            if (currentChunk && (currentChunk.length + paraText.length > chunkSize)) {
+                chunks.push(currentChunk);
+                
+                // Start new chunk with overlap content from the end of the previous chunk
+                if (chunkOverlap > 0 && currentChunk.length > chunkOverlap) {
+                    const overlapText = currentChunk.slice(-chunkOverlap);
+                    currentChunk = overlapText + '\n\n' + paraText;
+                } else {
+                    currentChunk = paraText;
+                }
+            } else {
+                // Add to current chunk
+                if (currentChunk) {
+                    currentChunk += '\n\n' + paraText;
+                } else {
+                    currentChunk = paraText;
+                }
+            }
+        }
+        
+        // Add the last chunk if it has content
+        if (currentChunk) {
+            chunks.push(currentChunk);
+        }
+        
+        return chunks;
+    }
+    
+    async saveEmbeddingsToDisk() {
+        try {
+            // Check if vector database is initialized and has data
+            if (!this.vectorDbManager || this.vectorDbManager.size() === 0) {
+                return;
+            }
+            
+            // Get the embeddings from the database
+            const embeddingData: SavedData = {
+                version: 1,
+                modelName: this.embeddingManager.getEmbeddingModel(),
+                chunks: [],
+                updatedAt: Date.now()
+            };
+            
+            // Add each chunk to the saved data
+            for (const [id, chunk] of this.vectorDbManager.db.entries()) {
+                if (chunk.embedding) {
+                    embeddingData.chunks.push({
+                        id: chunk.id,
+                        path: chunk.path,
+                        text: chunk.text,
+                        title: chunk.title,
+                        embedding: chunk.embedding,
+                        mtime: chunk.mtime || Date.now()
+                    });
+                }
+            }
+            
+            // Save to data.json file
+            await this.saveData(embeddingData);
+            
+            console.log(`Saved ${embeddingData.chunks.length} chunks to disk`);
+        } catch (error) {
+            console.error('Error saving embeddings to disk:', error);
+        }
+    }
+    
+    async loadEmbeddingsFromDisk(): Promise<boolean> {
+        try {
+            // Load saved data
+            const savedData = await this.loadData() as SavedData | null;
+            if (!savedData || !savedData.chunks || savedData.chunks.length === 0) {
+                console.log('No embeddings found on disk');
+                return false;
+            }
+            
+            // Make sure the embedding model matches
+            if (savedData.modelName !== this.embeddingManager.getEmbeddingModel()) {
+                console.log(`Embedding model changed (${savedData.modelName} -> ${this.embeddingManager.getEmbeddingModel()}), not loading saved embeddings`);
+                return false;
+            }
+            
+            // Clear any existing data
+            this.vectorDbManager.clear();
+            
+            // Add each chunk to the database
+            for (const chunk of savedData.chunks) {
+                if (chunk.embedding) {
+                    this.vectorDbManager.addChunk({
+                        id: chunk.id,
+                        text: chunk.text,
+                        path: chunk.path,
+                        title: chunk.title,
+                        embedding: chunk.embedding,
+                        mtime: chunk.mtime || Date.now()
+                    });
+                }
+            }
+            
+            console.log(`Loaded ${savedData.chunks.length} chunks from disk`);
+            new Notice(`Loaded ${savedData.chunks.length} note chunks from disk`);
+            return true;
+        } catch (error) {
+            console.error('Error loading embeddings from disk:', error);
+            return false;
+        }
+    }
+}
