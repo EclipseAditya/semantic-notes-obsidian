@@ -219,3 +219,200 @@ export class SemanticSearchModal extends Modal {
         contentEl.empty();
     }
 }
+
+export class AskQuestionModal extends Modal {
+    app: App;
+    plugin: SemanticNotesPlugin;
+    questionSetting: Setting;
+    answerContainer: HTMLElement;
+    sourcesContainer: HTMLElement;
+    contentEl: HTMLElement;
+    
+    constructor(app: App, plugin: SemanticNotesPlugin) {
+        super(app);
+        this.app = app;
+        this.plugin = plugin;
+    }
+    
+    onOpen() {
+        const { contentEl } = this;
+        
+        // Add title
+        contentEl.createEl('h2', { text: 'Ask AI a Question' });
+        
+        // Create container
+        const container = contentEl.createDiv({ cls: 'ask-question-container' });
+        
+        // Create question input
+        const questionContainer = container.createDiv({ cls: 'question-container' });
+        
+        const questionSetting = new Setting(questionContainer)
+            .setName('Question')
+            .setDesc('Ask a question about your notes')
+            .addText(text => {
+                text.setPlaceholder('e.g., "What are the key points about climate change in my notes?"')
+                    .onChange(async (value: string) => {
+                        // No immediate action on change
+                    });
+                
+                // Focus on the question input when modal opens
+                setTimeout(() => {
+                    text.inputEl.focus();
+                }, 10);
+                
+                // Add event listener for key press
+                text.inputEl.addEventListener('keydown', async (e: KeyboardEvent) => {
+                    if (e.key === 'Enter') {
+                        await this.askQuestion(text.getValue());
+                    }
+                });
+            });
+        
+        // Add ask button
+        questionSetting.addButton(button => {
+            button.setButtonText('Ask')
+                .setCta()
+                .onClick(async () => {
+                    const input = questionSetting.controlEl.querySelector('input');
+                    if (input) {
+                        const question = input.value;
+                        await this.askQuestion(question);
+                    }
+                });
+        });
+        
+        // Create answer container
+        const answerContainer = container.createDiv({ cls: 'answer-container' });
+        answerContainer.createEl('p', { text: 'Enter a question and click Ask to get an AI-generated answer based on your notes.' });
+        
+        // Create sources container
+        const sourcesContainer = container.createDiv({ cls: 'sources-container' });
+        sourcesContainer.style.display = 'none'; // Hide initially
+        
+        // Save references to UI elements
+        this.contentEl = contentEl;
+        this.questionSetting = questionSetting;
+        this.answerContainer = answerContainer;
+        this.sourcesContainer = sourcesContainer;
+    }
+    
+    async askQuestion(question: string) {
+        if (!question || question.trim().length === 0) {
+            new Notice('Please enter a question');
+            return;
+        }
+        
+        if (!this.plugin.settings.openRouterApiKey) {
+            new Notice('Please configure an OpenRouter API key in the plugin settings');
+            return;
+        }
+        
+        // Show loading message
+        this.answerContainer.empty();
+        this.answerContainer.createEl('p', { text: 'Generating answer...' });
+        
+        // Hide sources while loading
+        this.sourcesContainer.style.display = 'none';
+        
+        try {
+            // Call the RAG service to get an answer
+            const result = await this.plugin.ragService.answerQuestion(
+                question,
+                this.plugin.vectorDbManager,
+                this.plugin.embeddingManager
+            );
+            
+            // Display the answer
+            this.renderAnswer(result.answer);
+            
+            // Display sources if available
+            if (result.shouldShowSources && result.sources.length > 0) {
+                this.renderSources(result.sources);
+                this.sourcesContainer.style.display = 'block';
+            } else {
+                this.sourcesContainer.style.display = 'none';
+            }
+        } catch (error: any) {
+            console.error("Error asking question:", error);
+            this.answerContainer.empty();
+            this.answerContainer.createEl('p', { text: `Error: ${error.message}` });
+            this.sourcesContainer.style.display = 'none';
+        }
+    }
+    
+    renderAnswer(answer: string) {
+        const { answerContainer } = this;
+        answerContainer.empty();
+        
+        // Create answer heading
+        answerContainer.createEl('h3', { text: 'Answer' });
+        
+        // Create answer content
+        const answerContent = answerContainer.createEl('div', { cls: 'answer-content' });
+        
+        // Render the answer as markdown
+        MarkdownRenderer.renderMarkdown(
+            answer,
+            answerContent,
+            '',
+            {} as Component
+        );
+    }
+    
+    renderSources(sources: SearchResult[]) {
+        const { sourcesContainer } = this;
+        sourcesContainer.empty();
+        
+        // Create sources heading
+        sourcesContainer.createEl('h3', { text: 'Sources' });
+        
+        // Create sources list
+        const sourcesList = sourcesContainer.createEl('div', { cls: 'sources-list' });
+        
+        // Add each source
+        sources.forEach((source, index) => {
+            const sourceItem = sourcesList.createEl('div', { cls: 'source-item' });
+            
+            // Source title
+            sourceItem.createEl('div', { 
+                cls: 'source-title',
+                text: `${index + 1}. ${source.title}`
+            });
+            
+            // Source path
+            sourceItem.createEl('div', { 
+                cls: 'source-path',
+                text: source.path
+            });
+            
+            // Add button to open the note
+            const openNoteBtn = sourceItem.createEl('button', {
+                cls: 'source-open-note',
+                text: 'Open Note'
+            });
+            
+            openNoteBtn.addEventListener('click', () => {
+                // Try to find the file in the vault
+                const file = this.app.vault.getAbstractFileByPath(source.path);
+                if (file && file instanceof TFile) {
+                    const leaf = this.app.workspace.getLeaf();
+                    if (leaf) {
+                        leaf.openFile(file).then(() => this.close());
+                    }
+                } else {
+                    new Notice(`File not found: ${source.path}`);
+                }
+            });
+            
+            // Add a separator except for the last item
+            if (index < sources.length - 1) {
+                sourcesList.createEl('hr');
+            }
+        });
+    }
+    
+    onClose() {
+        const { contentEl } = this;
+        contentEl.empty();
+    }
+}
