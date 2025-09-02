@@ -53,6 +53,34 @@ For AI Q&A, the plugin:
 3. Sends the context and your question to OpenRouter
 4. Returns the AI-generated answer along with the source notes
 
+## Images
+1.png: Configuration options settings
+<img width="1151" height="887" alt="1" src="https://github.com/user-attachments/assets/a915353e-2cfa-46f8-8006-70c53a461e87" />
+
+2.png: Command options through command palette
+<img width="1517" height="897" alt="2" src="https://github.com/user-attachments/assets/9e96f59b-897f-4b61-a693-2ca9145af4f0" />
+
+3_example note.png: eg note created from rough note
+<img width="1276" height="887" alt="3_example note" src="https://github.com/user-attachments/assets/48aa6a05-d8a3-4fc3-bfd1-d08fb3c3ee33" />
+
+3_example-refactor.png: refactored vault graph view
+<img width="1425" height="922" alt="3_example-refactor" src="https://github.com/user-attachments/assets/918a512c-cf49-4969-8772-45ef52773a37" />
+
+4.png: semantic view of similar notes
+<img width="1782" height="977" alt="4" src="https://github.com/user-attachments/assets/75c23c02-c6ef-4567-9877-0e6e63e9b2b8" />
+
+5.png: Smart semantic search
+<img width="1356" height="992" alt="5" src="https://github.com/user-attachments/assets/5d15496c-caf0-47ca-88fb-2675eef56f3a" />
+
+6.png: Example usage of Brain working(recreation of all vault notes with better quality and semantics)
+<img width="1323" height="943" alt="6" src="https://github.com/user-attachments/assets/419d48a7-aba1-4730-bf24-9496015fe126" />
+
+7.png: Topic extraction feature usage
+<img width="1876" height="1003" alt="7" src="https://github.com/user-attachments/assets/f5138f17-140c-4602-a7db-a18147a09f3b" />
+
+8.png: Ask ai about your notes interface(rag model)
+<img width="1053" height="550" alt="8" src="https://github.com/user-attachments/assets/6d1c3504-3ad3-47b2-9193-58e25f440220" />
+
 ## Privacy
 
 Your notes never leave your computer. The embedding process happens locally using Transformers.js. For AI Q&A, only the relevant snippets from your notes (needed to answer your question) are sent to OpenRouter.
